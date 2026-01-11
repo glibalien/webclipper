@@ -266,6 +266,50 @@ kbd {
   font-size: 13px;
 }
 
+/* Radio Group */
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.radio-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.radio-label:hover {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.radio-label input[type="radio"] {
+  margin-top: 2px;
+  width: 16px;
+  height: 16px;
+  accent-color: #3b82f6;
+}
+
+.radio-label span:first-of-type {
+  font-weight: 500;
+  color: #1a1a1a;
+}
+
+.radio-help {
+  display: block;
+  font-size: 12px;
+  color: #666;
+  font-weight: 400 !important;
+  margin-left: auto;
+}
+
 /* Hidden */
 .hidden {
   display: none !important;

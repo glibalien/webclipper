@@ -23,6 +23,10 @@ class TanaClipperOptions {
       addSupertag: document.getElementById('add-supertag'),
       supertagTemplate: document.getElementById('supertag-template'),
       fieldAuthor: document.getElementById('field-author'),
+      authorTypeText: document.getElementById('author-type-text'),
+      authorTypeSupertag: document.getElementById('author-type-supertag'),
+      authorSupertagGroup: document.getElementById('author-supertag-group'),
+      fieldAuthorSupertag: document.getElementById('field-author-supertag'),
       fieldUrl: document.getElementById('field-url'),
       fieldPublication: document.getElementById('field-publication'),
       fieldDate: document.getElementById('field-date'),
@@ -46,6 +50,10 @@ class TanaClipperOptions {
 
     // Add supertag
     this.elements.addSupertag.addEventListener('click', () => this.addSupertag());
+
+    // Author field type toggle
+    this.elements.authorTypeText.addEventListener('change', () => this.toggleAuthorSupertagField());
+    this.elements.authorTypeSupertag.addEventListener('change', () => this.toggleAuthorSupertagField());
 
     // Shortcuts link
     this.elements.shortcutsLink.addEventListener('click', (e) => {
@@ -79,7 +87,21 @@ class TanaClipperOptions {
       this.elements.fieldUrl.value = result.fieldMappings.url || '';
       this.elements.fieldPublication.value = result.fieldMappings.publication || '';
       this.elements.fieldDate.value = result.fieldMappings.date || '';
+
+      // Author field type
+      if (result.fieldMappings.authorFieldType === 'supertag') {
+        this.elements.authorTypeSupertag.checked = true;
+      } else {
+        this.elements.authorTypeText.checked = true;
+      }
+      this.elements.fieldAuthorSupertag.value = result.fieldMappings.authorSupertagId || '';
+      this.toggleAuthorSupertagField();
     }
+  }
+
+  toggleAuthorSupertagField() {
+    const isSupertag = this.elements.authorTypeSupertag.checked;
+    this.elements.authorSupertagGroup.style.display = isSupertag ? 'block' : 'none';
   }
 
   renderSupertags() {
@@ -207,6 +229,8 @@ class TanaClipperOptions {
       supertags: validSupertags,
       fieldMappings: {
         author: this.elements.fieldAuthor.value.trim(),
+        authorFieldType: this.elements.authorTypeSupertag.checked ? 'supertag' : 'text',
+        authorSupertagId: this.elements.fieldAuthorSupertag.value.trim(),
         url: this.elements.fieldUrl.value.trim(),
         publication: this.elements.fieldPublication.value.trim(),
         date: this.elements.fieldDate.value.trim()

@@ -71,6 +71,31 @@
         </div>
 
         <div class="form-group">
+          <label>Author Field Type</label>
+          <div class="radio-group">
+            <label class="radio-label">
+              <input type="radio" name="author-field-type" id="author-type-text" value="text" checked>
+              <span>Text</span>
+              <span class="radio-help">Store author as plain text</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="author-field-type" id="author-type-supertag" value="supertag">
+              <span>Options from Supertag</span>
+              <span class="radio-help">Create instances of an author supertag</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group" id="author-supertag-group" style="display: none;">
+          <label for="field-author-supertag">Author Supertag ID</label>
+          <input type="text" id="field-author-supertag" placeholder="e.g., MaaJRCypzJ">
+          <p class="help-text">
+            The ID of the supertag to apply to each author (e.g., #author, #person).
+            Multiple authors will be parsed and created as separate instances.
+          </p>
+        </div>
+
+        <div class="form-group">
           <label for="field-url">URL Field ID</label>
           <input type="text" id="field-url" placeholder="e.g., jL2MRD47Wy">
         </div>

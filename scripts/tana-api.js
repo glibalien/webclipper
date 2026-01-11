@@ -69,7 +69,17 @@ export class TanaClient {
     if (fieldMappings) {
       // Author
       if (metadata.author && fieldMappings.author) {
-        node.children.push(this.createField(fieldMappings.author, metadata.author));
+        if (fieldMappings.authorFieldType === 'supertag' && fieldMappings.authorSupertagId) {
+          // Create author instances with supertag
+          node.children.push(this.createAuthorField(
+            fieldMappings.author,
+            metadata.author,
+            fieldMappings.authorSupertagId
+          ));
+        } else {
+          // Plain text author field
+          node.children.push(this.createField(fieldMappings.author, metadata.author));
+        }
       }
 
       // URL
@@ -112,6 +122,59 @@ export class TanaClient {
     }
 
     return node;
+  }
+
+  /**
+   * Parse author string into individual authors
+   * Handles comma-separated, "and"-separated, and ampersand-separated lists
+   */
+  parseAuthors(authorString) {
+    // Normalize the string
+    let normalized = authorString.trim();
+
+    // Replace " and " and " & " with commas for consistent splitting
+    normalized = normalized.replace(/\s+and\s+/gi, ', ');
+    normalized = normalized.replace(/\s*&\s*/g, ', ');
+
+    // Split by comma and clean up
+    const authors = normalized
+      .split(',')
+      .map(author => author.trim())
+      .filter(author => author.length > 0);
+
+    return authors;
+  }
+
+  /**
+   * Create an author field with supertag instances
+   * Each author becomes a node with the specified supertag applied
+   */
+  createAuthorField(attributeId, authorValue, authorSupertagId) {
+    const field = {
+      type: 'field',
+      attributeId,
+      children: []
+    };
+
+    const authors = this.parseAuthors(authorValue);
+
+    for (const author of authors) {
+      const sanitizedName = this.sanitizeNodeName(author);
+      if (sanitizedName) {
+        field.children.push({
+          name: sanitizedName,
+          supertags: [{ id: authorSupertagId }]
+        });
+      }
+    }
+
+    // If no valid authors were parsed, fall back to plain text
+    if (field.children.length === 0) {
+      const sanitizedValue = this.sanitizeNodeName(authorValue);
+      field.children.push({ name: sanitizedValue });
+    }
+
+    return field;
   }
 
   /**

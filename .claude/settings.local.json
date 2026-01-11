@@ -7,7 +7,8 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(curl:*)",
       "Bash(python3:*)",
-      "Bash(node --check:*)"
+      "Bash(node --check:*)",
+      "Bash(tree:*)"
     ]
   }
 }
