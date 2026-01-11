@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tana Web Clipper</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Tana Web Clipper</h1>
+    </header>
+
+    <div id="setup-required" class="setup-notice hidden">
+      <p>Please configure your Tana API token and supertag in the extension settings.</p>
+      <button id="open-settings" class="btn btn-primary">Open Settings</button>
+    </div>
+
+    <div id="main-content" class="hidden">
+      <div class="metadata-preview">
+        <div class="field">
+          <label>Title</label>
+          <div id="preview-title" class="value">Loading...</div>
+        </div>
+        <div class="field">
+          <label>Author</label>
+          <div id="preview-author" class="value">-</div>
+        </div>
+        <div class="field">
+          <label>Publication</label>
+          <div id="preview-publication" class="value">-</div>
+        </div>
+        <div class="field">
+          <label>Date</label>
+          <div id="preview-date" class="value">-</div>
+        </div>
+        <div class="field">
+          <label>URL</label>
+          <div id="preview-url" class="value truncate">-</div>
+        </div>
+      </div>
+
+      <div class="options">
+        <div class="option-row">
+          <label class="checkbox-label">
+            <input type="checkbox" id="clip-selection">
+            <span>Clip selection only</span>
+          </label>
+          <span id="selection-status" class="selection-status">No selection</span>
+        </div>
+
+        <div class="option-row">
+          <label for="supertag-select">Supertag:</label>
+          <select id="supertag-select">
+            <option value="">None</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="clip-btn" class="btn btn-primary">
+          <span class="btn-text">Clip to Tana</span>
+          <span class="btn-loading hidden">Clipping...</span>
+        </button>
+      </div>
+
+      <div id="status-message" class="status-message hidden"></div>
+    </div>
+  </div>
+
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

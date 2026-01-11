@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tana Web Clipper Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Tana Web Clipper Settings</h1>
+      <p class="subtitle">Configure your Tana integration</p>
+    </header>
+
+    <main>
+      <!-- API Token Section -->
+      <section class="section">
+        <h2>Tana API Token</h2>
+        <p class="help-text">
+          Generate an API token from your Tana workspace: Settings &gt; API Tokens
+        </p>
+        <div class="form-group">
+          <label for="api-token">API Token</label>
+          <div class="input-with-button">
+            <input type="password" id="api-token" placeholder="Enter your Tana API token">
+            <button type="button" id="toggle-token" class="btn btn-secondary btn-small">Show</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <button type="button" id="test-connection" class="btn btn-secondary">
+            Test Connection
+          </button>
+          <span id="connection-status" class="status-inline"></span>
+        </div>
+      </section>
+
+      <!-- Supertag Configuration -->
+      <section class="section">
+        <h2>Supertag Configuration</h2>
+        <div class="help-box">
+          <h4>How to get your Supertag ID:</h4>
+          <ol>
+            <li>Open Tana and navigate to your supertag definition</li>
+            <li>Click on the supertag name to open its configuration</li>
+            <li>Run the command: <code>Show API Schema</code></li>
+            <li>Copy the <code>id</code> value from the JSON</li>
+          </ol>
+        </div>
+
+        <div id="supertags-list" class="supertags-list">
+          <!-- Supertags will be dynamically added here -->
+        </div>
+
+        <button type="button" id="add-supertag" class="btn btn-secondary">
+          + Add Supertag
+        </button>
+      </section>
+
+      <!-- Field Mappings -->
+      <section class="section">
+        <h2>Field Mappings</h2>
+        <p class="help-text">
+          Map metadata to Tana fields. Get field IDs from the same "Show API Schema" output.
+          Leave blank to skip that field.
+        </p>
+
+        <div class="form-group">
+          <label for="field-author">Author Field ID</label>
+          <input type="text" id="field-author" placeholder="e.g., iKQAQN38Vx">
+        </div>
+
+        <div class="form-group">
+          <label for="field-url">URL Field ID</label>
+          <input type="text" id="field-url" placeholder="e.g., jL2MRD47Wy">
+        </div>
+
+        <div class="form-group">
+          <label for="field-publication">Publication Field ID</label>
+          <input type="text" id="field-publication" placeholder="e.g., kM3NSE58Xz">
+        </div>
+
+        <div class="form-group">
+          <label for="field-date">Date Field ID</label>
+          <input type="text" id="field-date" placeholder="e.g., lN4OTF69Ya">
+        </div>
+      </section>
+
+      <!-- Keyboard Shortcut -->
+      <section class="section">
+        <h2>Keyboard Shortcut</h2>
+        <p class="help-text">
+          Press <kbd id="shortcut-display">Ctrl+Shift+T</kbd> to quickly clip the current page.
+        </p>
+        <p class="help-text">
+          To change the shortcut, visit <a href="#" id="shortcuts-link">chrome://extensions/shortcuts</a>
+        </p>
+      </section>
+
+      <!-- Save Button -->
+      <div class="actions">
+        <button type="button" id="save-settings" class="btn btn-primary">
+          Save Settings
+        </button>
+        <span id="save-status" class="status-inline"></span>
+      </div>
+    </main>
+  </div>
+
+  <!-- Supertag Template (hidden) -->
+  <template id="supertag-template">
+    <div class="supertag-item" data-index="">
+      <div class="supertag-header">
+        <span class="supertag-number"></span>
+        <button type="button" class="btn-remove" title="Remove supertag">&times;</button>
+      </div>
+      <div class="form-group">
+        <label>Display Name</label>
+        <input type="text" class="supertag-name" placeholder="e.g., Article, Bookmark">
+      </div>
+      <div class="form-group">
+        <label>Supertag ID</label>
+        <input type="text" class="supertag-id" placeholder="e.g., MaaJRCypzJ">
+      </div>
+    </div>
+  </template>
+
+  <script src="options.js"></script>
+</body>
+</html>
