@@ -1,1 +1,1 @@
-This is the Tana Web Clipper.
+This is a Tana Web Clipper.
