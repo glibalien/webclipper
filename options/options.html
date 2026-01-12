@@ -106,6 +106,30 @@
         </div>
 
         <div class="form-group">
+          <label>Publication Field Type</label>
+          <div class="radio-group">
+            <label class="radio-label">
+              <input type="radio" name="publication-field-type" id="publication-type-text" value="text" checked>
+              <span>Text</span>
+              <span class="radio-help">Store publication as plain text</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="publication-field-type" id="publication-type-supertag" value="supertag">
+              <span>Options from Supertag</span>
+              <span class="radio-help">Create instances of a publication supertag</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group" id="publication-supertag-group" style="display: none;">
+          <label for="field-publication-supertag">Publication Supertag ID</label>
+          <input type="text" id="field-publication-supertag" placeholder="e.g., NbbKSCzqaL">
+          <p class="help-text">
+            The ID of the supertag to apply to the publication (e.g., #publication, #source).
+          </p>
+        </div>
+
+        <div class="form-group">
           <label for="field-date">Date Field ID</label>
           <input type="text" id="field-date" placeholder="e.g., lN4OTF69Ya">
         </div>

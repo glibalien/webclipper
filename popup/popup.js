@@ -228,11 +228,21 @@ class TanaClipperPopup {
     }
 
     if (metadata.publication && fieldMappings.publication) {
-      node.children.push({
-        type: 'field',
-        attributeId: fieldMappings.publication,
-        children: [{ name: this.sanitizeNodeName(metadata.publication) }]
-      });
+      if (fieldMappings.publicationFieldType === 'supertag' && fieldMappings.publicationSupertagId) {
+        // Create publication instance with supertag
+        node.children.push(this.createPublicationField(
+          fieldMappings.publication,
+          metadata.publication,
+          fieldMappings.publicationSupertagId
+        ));
+      } else {
+        // Plain text publication field
+        node.children.push({
+          type: 'field',
+          attributeId: fieldMappings.publication,
+          children: [{ name: this.sanitizeNodeName(metadata.publication) }]
+        });
+      }
     }
 
     if (metadata.publishedDate && fieldMappings.date) {
@@ -363,6 +373,33 @@ class TanaClipperPopup {
     if (field.children.length === 0) {
       const sanitizedValue = this.sanitizeNodeName(authorValue);
       field.children.push({ name: sanitizedValue });
+    }
+
+    return field;
+  }
+
+  /**
+   * Create a publication field with supertag instance
+   * Publication becomes a node with the specified supertag applied
+   */
+  createPublicationField(attributeId, publicationValue, publicationSupertagId) {
+    const field = {
+      type: 'field',
+      attributeId,
+      children: []
+    };
+
+    const sanitizedName = this.sanitizeNodeName(publicationValue);
+    if (sanitizedName) {
+      field.children.push({
+        name: sanitizedName,
+        supertags: [{ id: publicationSupertagId }]
+      });
+    }
+
+    // If sanitization resulted in empty string, fall back to plain text
+    if (field.children.length === 0) {
+      field.children.push({ name: publicationValue });
     }
 
     return field;

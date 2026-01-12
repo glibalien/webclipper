@@ -29,6 +29,10 @@ class TanaClipperOptions {
       fieldAuthorSupertag: document.getElementById('field-author-supertag'),
       fieldUrl: document.getElementById('field-url'),
       fieldPublication: document.getElementById('field-publication'),
+      publicationTypeText: document.getElementById('publication-type-text'),
+      publicationTypeSupertag: document.getElementById('publication-type-supertag'),
+      publicationSupertagGroup: document.getElementById('publication-supertag-group'),
+      fieldPublicationSupertag: document.getElementById('field-publication-supertag'),
       fieldDate: document.getElementById('field-date'),
       shortcutDisplay: document.getElementById('shortcut-display'),
       shortcutsLink: document.getElementById('shortcuts-link'),
@@ -54,6 +58,10 @@ class TanaClipperOptions {
     // Author field type toggle
     this.elements.authorTypeText.addEventListener('change', () => this.toggleAuthorSupertagField());
     this.elements.authorTypeSupertag.addEventListener('change', () => this.toggleAuthorSupertagField());
+
+    // Publication field type toggle
+    this.elements.publicationTypeText.addEventListener('change', () => this.togglePublicationSupertagField());
+    this.elements.publicationTypeSupertag.addEventListener('change', () => this.togglePublicationSupertagField());
 
     // Shortcuts link
     this.elements.shortcutsLink.addEventListener('click', (e) => {
@@ -96,12 +104,26 @@ class TanaClipperOptions {
       }
       this.elements.fieldAuthorSupertag.value = result.fieldMappings.authorSupertagId || '';
       this.toggleAuthorSupertagField();
+
+      // Publication field type
+      if (result.fieldMappings.publicationFieldType === 'supertag') {
+        this.elements.publicationTypeSupertag.checked = true;
+      } else {
+        this.elements.publicationTypeText.checked = true;
+      }
+      this.elements.fieldPublicationSupertag.value = result.fieldMappings.publicationSupertagId || '';
+      this.togglePublicationSupertagField();
     }
   }
 
   toggleAuthorSupertagField() {
     const isSupertag = this.elements.authorTypeSupertag.checked;
     this.elements.authorSupertagGroup.style.display = isSupertag ? 'block' : 'none';
+  }
+
+  togglePublicationSupertagField() {
+    const isSupertag = this.elements.publicationTypeSupertag.checked;
+    this.elements.publicationSupertagGroup.style.display = isSupertag ? 'block' : 'none';
   }
 
   renderSupertags() {
@@ -233,6 +255,8 @@ class TanaClipperOptions {
         authorSupertagId: this.elements.fieldAuthorSupertag.value.trim(),
         url: this.elements.fieldUrl.value.trim(),
         publication: this.elements.fieldPublication.value.trim(),
+        publicationFieldType: this.elements.publicationTypeSupertag.checked ? 'supertag' : 'text',
+        publicationSupertagId: this.elements.fieldPublicationSupertag.value.trim(),
         date: this.elements.fieldDate.value.trim()
       }
     };
