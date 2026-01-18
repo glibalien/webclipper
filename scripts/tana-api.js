@@ -2,6 +2,42 @@
 
 const TANA_API_ENDPOINT = 'https://europe-west1-tagr-prod.cloudfunctions.net/addToNodeV2';
 const MAX_CONTENT_LENGTH = 4500; // Leave room for overhead
+const NODE_CACHE_KEY = 'tanaNodeCache';
+
+/**
+ * Node cache for deduplicating supertag instances (publications, authors)
+ * Maps "supertagId:normalizedName" -> nodeId
+ */
+class NodeCache {
+  constructor() {
+    this.cache = null;
+  }
+
+  async load() {
+    if (this.cache !== null) return;
+    const result = await chrome.storage.local.get(NODE_CACHE_KEY);
+    this.cache = result[NODE_CACHE_KEY] || {};
+  }
+
+  async save() {
+    await chrome.storage.local.set({ [NODE_CACHE_KEY]: this.cache });
+  }
+
+  getCacheKey(supertagId, name) {
+    // Normalize name for consistent matching
+    return `${supertagId}:${name.toLowerCase().trim()}`;
+  }
+
+  get(supertagId, name) {
+    const key = this.getCacheKey(supertagId, name);
+    return this.cache[key] || null;
+  }
+
+  set(supertagId, name, nodeId) {
+    const key = this.getCacheKey(supertagId, name);
+    this.cache[key] = nodeId;
+  }
+}
 
 /**
  * Tana API Client
@@ -9,6 +45,7 @@ const MAX_CONTENT_LENGTH = 4500; // Leave room for overhead
 export class TanaClient {
   constructor(apiToken) {
     this.apiToken = apiToken;
+    this.nodeCache = new NodeCache();
   }
 
   /**
@@ -33,13 +70,21 @@ export class TanaClient {
       isSelection = false
     } = options;
 
+    // Load node cache for deduplication
+    await this.nodeCache.load();
+    console.log('Loaded node cache:', this.nodeCache.cache);
+
+    // Track nodes we're creating so we can cache their IDs from the response
+    const pendingNodes = [];
+
     const node = this.buildNode({
       title,
       content,
       metadata,
       supertagId,
       fieldMappings,
-      isSelection
+      isSelection,
+      pendingNodes
     });
 
     const payload = {
@@ -47,13 +92,75 @@ export class TanaClient {
       nodes: [node]
     };
 
-    return this.sendRequest(payload);
+    const result = await this.sendRequest(payload);
+
+    // Cache any newly created node IDs from the response
+    if (result.success && result.data && pendingNodes.length > 0) {
+      await this.cacheCreatedNodes(result.data, pendingNodes);
+    }
+
+    return result;
+  }
+
+  /**
+   * Extract and cache node IDs from API response
+   */
+  async cacheCreatedNodes(responseData, pendingNodes) {
+    try {
+      console.log('Tana API response:', JSON.stringify(responseData, null, 2));
+      console.log('Pending nodes to cache:', pendingNodes);
+
+      // Try to find node IDs in the response - structure may vary
+      const foundIds = this.extractNodeIds(responseData, []);
+      console.log('Extracted node IDs:', foundIds);
+
+      for (const found of foundIds) {
+        if (found.id && found.name) {
+          const pending = pendingNodes.find(
+            p => p.name.toLowerCase() === found.name.toLowerCase()
+          );
+          if (pending) {
+            console.log(`Caching: ${pending.name} -> ${found.id}`);
+            this.nodeCache.set(pending.supertagId, pending.name, found.id);
+          }
+        }
+      }
+
+      await this.nodeCache.save();
+      console.log('Cache after save:', this.nodeCache.cache);
+    } catch (e) {
+      console.error('Failed to cache node IDs:', e);
+    }
+  }
+
+  /**
+   * Recursively extract all nodes with nodeId and name from response
+   */
+  extractNodeIds(obj, results = []) {
+    if (!obj || typeof obj !== 'object') return results;
+
+    // Tana API returns nodeId, not id
+    if (obj.nodeId && obj.name) {
+      results.push({ id: obj.nodeId, name: obj.name });
+    }
+
+    if (Array.isArray(obj)) {
+      for (const item of obj) {
+        this.extractNodeIds(item, results);
+      }
+    } else {
+      for (const key of Object.keys(obj)) {
+        this.extractNodeIds(obj[key], results);
+      }
+    }
+
+    return results;
   }
 
   /**
    * Build a Tana node object
    */
-  buildNode({ title, content, metadata, supertagId, fieldMappings, isSelection }) {
+  buildNode({ title, content, metadata, supertagId, fieldMappings, isSelection, pendingNodes = [] }) {
     const sanitizedTitle = this.sanitizeNodeName(title || 'Untitled');
     const node = {
       name: isSelection ? `Selection from: ${sanitizedTitle}` : sanitizedTitle,
@@ -70,11 +177,11 @@ export class TanaClient {
       // Author
       if (metadata.author && fieldMappings.author) {
         if (fieldMappings.authorFieldType === 'supertag' && fieldMappings.authorSupertagId) {
-          // Create author instances with supertag
           node.children.push(this.createAuthorField(
             fieldMappings.author,
             metadata.author,
-            fieldMappings.authorSupertagId
+            fieldMappings.authorSupertagId,
+            pendingNodes
           ));
         } else {
           // Plain text author field
@@ -90,11 +197,11 @@ export class TanaClient {
       // Publication
       if (metadata.publication && fieldMappings.publication) {
         if (fieldMappings.publicationFieldType === 'supertag' && fieldMappings.publicationSupertagId) {
-          // Create publication instance with supertag
           node.children.push(this.createPublicationField(
             fieldMappings.publication,
             metadata.publication,
-            fieldMappings.publicationSupertagId
+            fieldMappings.publicationSupertagId,
+            pendingNodes
           ));
         } else {
           // Plain text publication field
@@ -157,9 +264,9 @@ export class TanaClient {
 
   /**
    * Create an author field with supertag instances
-   * Each author becomes a node with the specified supertag applied
+   * Uses cached node IDs when available to avoid duplicates
    */
-  createAuthorField(attributeId, authorValue, authorSupertagId) {
+  createAuthorField(attributeId, authorValue, authorSupertagId, pendingNodes = []) {
     const field = {
       type: 'field',
       attributeId,
@@ -171,10 +278,20 @@ export class TanaClient {
     for (const author of authors) {
       const sanitizedName = this.sanitizeNodeName(author);
       if (sanitizedName) {
-        field.children.push({
-          name: sanitizedName,
-          supertags: [{ id: authorSupertagId }]
-        });
+        // Check cache for existing node ID
+        const cachedId = this.nodeCache.get(authorSupertagId, sanitizedName);
+
+        if (cachedId) {
+          // Reference existing node using dataType: "reference"
+          field.children.push({ dataType: 'reference', id: cachedId });
+        } else {
+          // Create new node with supertag, track for caching
+          field.children.push({
+            name: sanitizedName,
+            supertags: [{ id: authorSupertagId }]
+          });
+          pendingNodes.push({ name: sanitizedName, supertagId: authorSupertagId });
+        }
       }
     }
 
@@ -189,9 +306,9 @@ export class TanaClient {
 
   /**
    * Create a publication field with supertag instance
-   * Publication becomes a node with the specified supertag applied
+   * Uses cached node ID when available to avoid duplicates
    */
-  createPublicationField(attributeId, publicationValue, publicationSupertagId) {
+  createPublicationField(attributeId, publicationValue, publicationSupertagId, pendingNodes = []) {
     const field = {
       type: 'field',
       attributeId,
@@ -200,10 +317,24 @@ export class TanaClient {
 
     const sanitizedName = this.sanitizeNodeName(publicationValue);
     if (sanitizedName) {
-      field.children.push({
-        name: sanitizedName,
-        supertags: [{ id: publicationSupertagId }]
-      });
+      // Check cache for existing node ID
+      const cachedId = this.nodeCache.get(publicationSupertagId, sanitizedName);
+      console.log(`Publication lookup: "${sanitizedName}" (supertag: ${publicationSupertagId}) -> cached ID: ${cachedId}`);
+      console.log('Current cache:', this.nodeCache.cache);
+
+      if (cachedId) {
+        // Reference existing node using dataType: "reference"
+        console.log(`Using cached publication node: ${cachedId}`);
+        field.children.push({ dataType: 'reference', id: cachedId });
+      } else {
+        // Create new node with supertag, track for caching
+        console.log(`Creating new publication node: ${sanitizedName}`);
+        field.children.push({
+          name: sanitizedName,
+          supertags: [{ id: publicationSupertagId }]
+        });
+        pendingNodes.push({ name: sanitizedName, supertagId: publicationSupertagId });
+      }
     }
 
     // If sanitization resulted in empty string, fall back to plain text

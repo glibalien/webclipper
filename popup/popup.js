@@ -1,11 +1,48 @@
 // Popup script for Tana Web Clipper
 
+const NODE_CACHE_KEY = 'tanaNodeCache';
+
+/**
+ * Node cache for deduplicating supertag instances (publications, authors)
+ * Maps "supertagId:normalizedName" -> nodeId
+ */
+class NodeCache {
+  constructor() {
+    this.cache = null;
+  }
+
+  async load() {
+    if (this.cache !== null) return;
+    const result = await chrome.storage.local.get(NODE_CACHE_KEY);
+    this.cache = result[NODE_CACHE_KEY] || {};
+  }
+
+  async save() {
+    await chrome.storage.local.set({ [NODE_CACHE_KEY]: this.cache });
+  }
+
+  getCacheKey(supertagId, name) {
+    return `${supertagId}:${name.toLowerCase().trim()}`;
+  }
+
+  get(supertagId, name) {
+    const key = this.getCacheKey(supertagId, name);
+    return this.cache[key] || null;
+  }
+
+  set(supertagId, name, nodeId) {
+    const key = this.getCacheKey(supertagId, name);
+    this.cache[key] = nodeId;
+  }
+}
+
 class TanaClipperPopup {
   constructor() {
     this.elements = {};
     this.metadata = null;
     this.hasSelection = false;
     this.settings = null;
+    this.nodeCache = new NodeCache();
   }
 
   async init() {
@@ -161,19 +198,31 @@ class TanaClipperPopup {
         throw new Error('Failed to extract content from page');
       }
 
+      // Load node cache for deduplication
+      await this.nodeCache.load();
+      console.log('Loaded node cache:', this.nodeCache.cache);
+
+      // Track nodes we're creating so we can cache their IDs from the response
+      const pendingNodes = [];
+
       // Build payload
       const supertagId = this.elements.supertagSelect.value;
       const payload = this.buildTanaPayload(
         this.metadata,
         contentResponse.content,
         supertagId,
-        clipSelectionOnly
+        clipSelectionOnly,
+        pendingNodes
       );
 
       // Send to Tana
       const result = await this.sendToTana(payload);
 
       if (result.success) {
+        // Cache any newly created node IDs from the response
+        if (result.data && pendingNodes.length > 0) {
+          await this.cacheCreatedNodes(result.data, pendingNodes);
+        }
         this.showStatus('Clipped to Tana successfully!', 'success');
       } else {
         throw new Error(result.error || 'Failed to clip to Tana');
@@ -186,7 +235,52 @@ class TanaClipperPopup {
     }
   }
 
-  buildTanaPayload(metadata, content, supertagId, isSelection) {
+  async cacheCreatedNodes(responseData, pendingNodes) {
+    try {
+      console.log('Tana API response:', JSON.stringify(responseData, null, 2));
+      console.log('Pending nodes to cache:', pendingNodes);
+
+      const foundIds = this.extractNodeIds(responseData, []);
+      console.log('Extracted node IDs:', foundIds);
+
+      for (const found of foundIds) {
+        if (found.id && found.name) {
+          const pending = pendingNodes.find(
+            p => p.name.toLowerCase() === found.name.toLowerCase()
+          );
+          if (pending) {
+            console.log(`Caching: ${pending.name} -> ${found.id}`);
+            this.nodeCache.set(pending.supertagId, pending.name, found.id);
+          }
+        }
+      }
+
+      await this.nodeCache.save();
+      console.log('Cache after save:', this.nodeCache.cache);
+    } catch (e) {
+      console.error('Failed to cache node IDs:', e);
+    }
+  }
+
+  extractNodeIds(obj, results = []) {
+    if (!obj || typeof obj !== 'object') return results;
+    // Tana API returns nodeId, not id
+    if (obj.nodeId && obj.name) {
+      results.push({ id: obj.nodeId, name: obj.name });
+    }
+    if (Array.isArray(obj)) {
+      for (const item of obj) {
+        this.extractNodeIds(item, results);
+      }
+    } else {
+      for (const key of Object.keys(obj)) {
+        this.extractNodeIds(obj[key], results);
+      }
+    }
+    return results;
+  }
+
+  buildTanaPayload(metadata, content, supertagId, isSelection, pendingNodes = []) {
     const title = this.sanitizeNodeName(metadata.title || 'Untitled');
     const node = {
       name: isSelection ? `Selection from: ${title}` : title,
@@ -203,11 +297,11 @@ class TanaClipperPopup {
 
     if (metadata.author && fieldMappings.author) {
       if (fieldMappings.authorFieldType === 'supertag' && fieldMappings.authorSupertagId) {
-        // Create author instances with supertag
         node.children.push(this.createAuthorField(
           fieldMappings.author,
           metadata.author,
-          fieldMappings.authorSupertagId
+          fieldMappings.authorSupertagId,
+          pendingNodes
         ));
       } else {
         // Plain text author field
@@ -229,11 +323,11 @@ class TanaClipperPopup {
 
     if (metadata.publication && fieldMappings.publication) {
       if (fieldMappings.publicationFieldType === 'supertag' && fieldMappings.publicationSupertagId) {
-        // Create publication instance with supertag
         node.children.push(this.createPublicationField(
           fieldMappings.publication,
           metadata.publication,
-          fieldMappings.publicationSupertagId
+          fieldMappings.publicationSupertagId,
+          pendingNodes
         ));
       } else {
         // Plain text publication field
@@ -280,6 +374,7 @@ class TanaClipperPopup {
       nodes: [node]
     };
 
+    console.log('Full payload being sent:', JSON.stringify(payload, null, 2));
     return payload;
   }
 
@@ -348,9 +443,9 @@ class TanaClipperPopup {
 
   /**
    * Create an author field with supertag instances
-   * Each author becomes a node with the specified supertag applied
+   * Uses cached node IDs when available to avoid duplicates
    */
-  createAuthorField(attributeId, authorValue, authorSupertagId) {
+  createAuthorField(attributeId, authorValue, authorSupertagId, pendingNodes = []) {
     const field = {
       type: 'field',
       attributeId,
@@ -362,10 +457,20 @@ class TanaClipperPopup {
     for (const author of authors) {
       const sanitizedName = this.sanitizeNodeName(author);
       if (sanitizedName) {
-        field.children.push({
-          name: sanitizedName,
-          supertags: [{ id: authorSupertagId }]
-        });
+        // Check cache for existing node ID
+        const cachedId = this.nodeCache.get(authorSupertagId, sanitizedName);
+
+        if (cachedId) {
+          // Reference existing node using dataType: "reference"
+          field.children.push({ dataType: 'reference', id: cachedId });
+        } else {
+          // Create new node with supertag, track for caching
+          field.children.push({
+            name: sanitizedName,
+            supertags: [{ id: authorSupertagId }]
+          });
+          pendingNodes.push({ name: sanitizedName, supertagId: authorSupertagId });
+        }
       }
     }
 
@@ -380,9 +485,9 @@ class TanaClipperPopup {
 
   /**
    * Create a publication field with supertag instance
-   * Publication becomes a node with the specified supertag applied
+   * Uses cached node ID when available to avoid duplicates
    */
-  createPublicationField(attributeId, publicationValue, publicationSupertagId) {
+  createPublicationField(attributeId, publicationValue, publicationSupertagId, pendingNodes = []) {
     const field = {
       type: 'field',
       attributeId,
@@ -391,10 +496,23 @@ class TanaClipperPopup {
 
     const sanitizedName = this.sanitizeNodeName(publicationValue);
     if (sanitizedName) {
-      field.children.push({
-        name: sanitizedName,
-        supertags: [{ id: publicationSupertagId }]
-      });
+      // Check cache for existing node ID
+      const cachedId = this.nodeCache.get(publicationSupertagId, sanitizedName);
+      console.log(`Publication lookup: "${sanitizedName}" -> cached ID: ${cachedId}`);
+
+      if (cachedId) {
+        // Reference existing node using dataType: "reference"
+        console.log(`Using cached publication node: ${cachedId}`);
+        field.children.push({ dataType: 'reference', id: cachedId });
+      } else {
+        // Create new node with supertag, track for caching
+        console.log(`Creating new publication node: ${sanitizedName}`);
+        field.children.push({
+          name: sanitizedName,
+          supertags: [{ id: publicationSupertagId }]
+        });
+        pendingNodes.push({ name: sanitizedName, supertagId: publicationSupertagId });
+      }
     }
 
     // If sanitization resulted in empty string, fall back to plain text
@@ -423,7 +541,8 @@ class TanaClipperPopup {
       return { success: false, error: `API error: ${response.status} - ${errorText}` };
     }
 
-    return { success: true };
+    const data = await response.json().catch(() => ({}));
+    return { success: true, data };
   }
 
   setLoading(loading) {
