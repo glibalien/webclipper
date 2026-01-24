@@ -34,10 +34,18 @@ The extension automatically extracts rich metadata from web pages:
 
 ## Installation
 
-### From Chrome Web Store
-*(Coming soon)*
+### From Chrome Web Store (Recommended)
 
-### Manual Installation (Developer Mode)
+Install the extension directly from the Chrome Web Store:
+
+**[Install Tana Web Clipper](https://chromewebstore.google.com/detail/tana-web-clipper/hjbhjaijfplenhlgdclaffmiilcjefbb)**
+
+1. Click the link above
+2. Click "Add to Chrome" (or "Add to Edge" if using Microsoft Edge)
+3. Confirm by clicking "Add extension"
+4. The Tana Web Clipper icon will appear in your toolbar
+
+### Manual Installation (For Development)
 1. Clone this repository:
    ```bash
    git clone https://github.com/iamactionbarry/webclipper.git
