@@ -4,6 +4,7 @@ const MCP_ENDPOINT = 'http://localhost:8262/mcp';
 const HEALTH_ENDPOINT = 'http://localhost:8262/health';
 const MAX_CONTENT_LENGTH = 4500;
 const MCP_SESSION_KEY = 'mcpSessionId';
+const MCP_TOKEN_KEY = 'mcpAccessToken';
 
 /**
  * MCP protocol transport — JSON-RPC 2.0 over HTTP
@@ -13,7 +14,26 @@ class McpClient {
     this.endpoint = MCP_ENDPOINT;
     this.healthEndpoint = HEALTH_ENDPOINT;
     this.sessionId = null;
+    this.accessToken = null;
     this.requestId = 0;
+  }
+
+  /**
+   * Set the Personal Access Token for authentication
+   */
+  setToken(token) {
+    this.accessToken = token;
+  }
+
+  /**
+   * Load token from storage if not already set
+   */
+  async ensureToken() {
+    if (this.accessToken) return;
+    const stored = await chrome.storage.local.get(MCP_TOKEN_KEY);
+    if (stored[MCP_TOKEN_KEY]) {
+      this.accessToken = stored[MCP_TOKEN_KEY];
+    }
   }
 
   /**
@@ -49,6 +69,7 @@ class McpClient {
    * Send a JSON-RPC request and return parsed result
    */
   async sendRequest(method, params) {
+    await this.ensureToken();
     if (!this.sessionId) {
       await this.restoreSession();
     }
@@ -106,6 +127,7 @@ class McpClient {
    * Restore a previously saved MCP session, re-initialize if stale
    */
   async restoreSession() {
+    await this.ensureToken();
     const stored = await chrome.storage.local.get(MCP_SESSION_KEY);
     if (stored[MCP_SESSION_KEY]) {
       this.sessionId = stored[MCP_SESSION_KEY];
@@ -136,6 +158,9 @@ class McpClient {
       'Content-Type': 'application/json',
       'Accept': 'application/json'
     };
+    if (this.accessToken) {
+      headers['Authorization'] = `Bearer ${this.accessToken}`;
+    }
     if (this.sessionId) {
       headers['Mcp-Session-Id'] = this.sessionId;
     }
@@ -173,6 +198,9 @@ class McpClient {
     const headers = {
       'Content-Type': 'application/json'
     };
+    if (this.accessToken) {
+      headers['Authorization'] = `Bearer ${this.accessToken}`;
+    }
     if (this.sessionId) {
       headers['Mcp-Session-Id'] = this.sessionId;
     }
@@ -436,10 +464,18 @@ class TanaLocalClient {
       return { success: false, error: 'Tana Desktop is not running or Local API is not enabled' };
     }
 
+    await this.mcp.ensureToken();
+    if (!this.mcp.accessToken) {
+      return { success: false, error: 'No access token configured. Enter your Personal Access Token above.' };
+    }
+
     try {
       await this.mcp.initialize();
       return { success: true };
     } catch (error) {
+      if (error.status === 401) {
+        return { success: false, error: 'Invalid token. Check your Personal Access Token.' };
+      }
       return { success: false, error: error.message };
     }
   }

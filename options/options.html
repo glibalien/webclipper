@@ -19,7 +19,15 @@
         <h2>Connection</h2>
         <p class="help-text">
           Requires Tana Desktop with "Local API/MCP server (Alpha)" enabled in Tana Labs.
+          Generate a Personal Access Token in Tana Desktop settings.
         </p>
+        <div class="form-group">
+          <label for="access-token">Personal Access Token</label>
+          <div class="input-with-button">
+            <input type="password" id="access-token" placeholder="Enter your Tana Personal Access Token">
+            <button type="button" id="toggle-token" class="btn btn-secondary btn-small">Show</button>
+          </div>
+        </div>
         <div class="connection-status-row">
           <span id="connection-dot" class="connection-dot disconnected"></span>
           <span id="connection-text" class="connection-text">Not connected</span>

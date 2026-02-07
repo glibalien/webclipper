@@ -22,6 +22,8 @@ class TanaClipperOptions {
 
   cacheElements() {
     this.elements = {
+      accessToken: document.getElementById('access-token'),
+      toggleToken: document.getElementById('toggle-token'),
       connectionDot: document.getElementById('connection-dot'),
       connectionText: document.getElementById('connection-text'),
       connectBtn: document.getElementById('connect-btn'),
@@ -44,6 +46,13 @@ class TanaClipperOptions {
   }
 
   bindEvents() {
+    // Toggle token visibility
+    this.elements.toggleToken.addEventListener('click', () => {
+      const isPassword = this.elements.accessToken.type === 'password';
+      this.elements.accessToken.type = isPassword ? 'text' : 'password';
+      this.elements.toggleToken.textContent = isPassword ? 'Hide' : 'Show';
+    });
+
     this.elements.connectBtn.addEventListener('click', () => this.connect());
     this.elements.testConnection.addEventListener('click', () => this.testConnection());
     this.elements.refreshWorkspaces.addEventListener('click', () => this.loadWorkspaces());
@@ -75,15 +84,23 @@ class TanaClipperOptions {
     this.workspaceId = result.workspaceId || null;
     this.selectedTags = result.supertags || [];
 
-    // Restore field mappings into tagSchemas for later rendering
     if (result.fieldMappings) {
       this.savedFieldMappings = result.fieldMappings;
+    }
+
+    // Load token from local storage (not synced — local server only)
+    const local = await chrome.storage.local.get('mcpAccessToken');
+    if (local.mcpAccessToken) {
+      this.elements.accessToken.value = local.mcpAccessToken;
+      this.client.mcp.setToken(local.mcpAccessToken);
     }
   }
 
   // --- Connection ---
 
   async checkConnection() {
+    if (!this.client.mcp.accessToken) return;
+
     const health = await this.client.mcp.checkHealth();
     if (health.available) {
       try {
@@ -99,6 +116,13 @@ class TanaClipperOptions {
   }
 
   async connect() {
+    const token = this.elements.accessToken.value.trim();
+    if (!token) {
+      this.showStatus(this.elements.connectionStatus,
+        'Please enter a Personal Access Token', 'error');
+      return;
+    }
+
     this.elements.connectBtn.disabled = true;
     this.elements.connectBtn.textContent = 'Connecting...';
     this.showStatus(this.elements.connectionStatus, '', '');
@@ -111,16 +135,23 @@ class TanaClipperOptions {
         return;
       }
 
-      this.showStatus(this.elements.connectionStatus,
-        'Waiting for approval in Tana Desktop...', '');
+      // Save token and set on client
+      this.client.mcp.setToken(token);
+      await chrome.storage.local.set({ mcpAccessToken: token });
+
       await this.client.mcp.initialize();
       this.setConnected(true);
       this.showStatus(this.elements.connectionStatus, 'Connected!', 'success');
       await this.loadWorkspaces();
     } catch (error) {
       this.setConnected(false);
-      this.showStatus(this.elements.connectionStatus,
-        `Connection failed: ${error.message}`, 'error');
+      if (error.status === 401) {
+        this.showStatus(this.elements.connectionStatus,
+          'Invalid token. Check your Personal Access Token.', 'error');
+      } else {
+        this.showStatus(this.elements.connectionStatus,
+          `Connection failed: ${error.message}`, 'error');
+      }
     } finally {
       this.elements.connectBtn.disabled = false;
       this.elements.connectBtn.textContent = 'Connect to Tana';
