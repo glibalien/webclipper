@@ -233,6 +233,7 @@ class TanaClipperOptions {
 
     try {
       const tags = await this.client.listTags(this.workspaceId);
+      console.log('Raw list_tags response:', JSON.stringify(tags, null, 2));
       this.allTags = Array.isArray(tags) ? tags : [];
       this.renderTags();
     } catch (error) {
@@ -307,7 +308,9 @@ class TanaClipperOptions {
     for (const tag of this.selectedTags) {
       if (!this.tagSchemas[tag.id]) {
         try {
-          this.tagSchemas[tag.id] = await this.client.getTagSchema(tag.id);
+          const schema = await this.client.getTagSchema(tag.id);
+          console.log(`Raw get_tag_schema response for ${tag.name}:`, JSON.stringify(schema, null, 2));
+          this.tagSchemas[tag.id] = schema;
         } catch (error) {
           console.error(`Failed to load schema for ${tag.name}:`, error);
           this.tagSchemas[tag.id] = { fields: [] };
