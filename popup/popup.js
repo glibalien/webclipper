@@ -1,6 +1,6 @@
 // Popup script for Tana Web Clipper
 
-import { TanaClient } from '../scripts/tana-api.js';
+import TanaLocalClient from '../scripts/tana-local-api.js';
 
 class TanaClipperPopup {
   constructor() {
@@ -54,7 +54,6 @@ class TanaClipperPopup {
 
   async loadSettings() {
     const result = await chrome.storage.sync.get([
-      'apiToken',
       'supertags',
       'fieldMappings'
     ]);
@@ -67,6 +66,7 @@ class TanaClipperPopup {
         const option = document.createElement('option');
         option.value = tag.id;
         option.textContent = tag.name;
+        option.dataset.tagName = tag.name;
         this.elements.supertagSelect.appendChild(option);
       });
       // Select first supertag by default
@@ -77,8 +77,7 @@ class TanaClipperPopup {
   }
 
   isConfigured() {
-    return this.settings?.apiToken &&
-           this.settings?.supertags?.length > 0 &&
+    return this.settings?.supertags?.length > 0 &&
            this.settings?.supertags[0]?.id;
   }
 
@@ -97,7 +96,7 @@ class TanaClipperPopup {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
       // Inject content script and get page data
-      const results = await chrome.scripting.executeScript({
+      await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         files: ['scripts/content.js']
       });
@@ -163,15 +162,20 @@ class TanaClipperPopup {
         throw new Error('Failed to extract content from page');
       }
 
-      // Use TanaClient to build payload and send to API
-      const client = new TanaClient(this.settings.apiToken);
-      const supertagId = this.elements.supertagSelect.value;
+      // Get selected tag name + id
+      const selectedOption = this.elements.supertagSelect.selectedOptions[0];
+      const tagId = this.elements.supertagSelect.value;
+      const tagName = selectedOption?.dataset?.tagName || '';
+
+      // Use TanaLocalClient to build Tana Paste and send via MCP
+      const client = new TanaLocalClient();
 
       const result = await client.clip({
         title: this.metadata.title,
         content: contentResponse.content,
         metadata: this.metadata,
-        supertagId,
+        tagId,
+        tagName,
         fieldMappings: this.settings.fieldMappings,
         isSelection: clipSelectionOnly
       });

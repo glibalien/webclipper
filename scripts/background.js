@@ -1,11 +1,11 @@
 // Background service worker for Tana Web Clipper
 
-import { TanaClient } from './tana-api.js';
+import TanaLocalClient from './tana-local-api.js';
 
 /**
- * Create context menu items on extension install
+ * Create context menu items on extension install, run migration on update
  */
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async (details) => {
   // Create context menu for page clipping
   chrome.contextMenus.create({
     id: 'clip-page-to-tana',
@@ -33,6 +33,12 @@ chrome.runtime.onInstalled.addListener(() => {
     title: 'Clip link to Tana',
     contexts: ['link']
   });
+
+  // v1 -> v2 migration: clean up old storage keys
+  if (details.reason === 'update') {
+    await chrome.storage.local.remove(['tanaNodeCache']);
+    await chrome.storage.sync.remove(['apiToken']);
+  }
 });
 
 /**
@@ -90,21 +96,33 @@ async function injectContentScript(tabId) {
 }
 
 /**
+ * Get settings and the first tag's name + id
+ */
+async function getClipSettings() {
+  const settings = await chrome.storage.sync.get([
+    'supertags',
+    'fieldMappings'
+  ]);
+
+  if (!settings.supertags?.length) {
+    return null;
+  }
+
+  return {
+    tagId: settings.supertags[0].id,
+    tagName: settings.supertags[0].name,
+    fieldMappings: settings.fieldMappings
+  };
+}
+
+/**
  * Clip the current page
  */
 async function clipPage(tab, selectionOnly) {
   try {
-    // Check settings
-    const settings = await chrome.storage.sync.get([
-      'apiToken',
-      'supertags',
-      'fieldMappings',
-      'defaultTarget',
-      'customNodeId'
-    ]);
-
-    if (!settings.apiToken || !settings.supertags?.length) {
-      showNotification('Setup Required', 'Please configure your Tana settings first.');
+    const clipSettings = await getClipSettings();
+    if (!clipSettings) {
+      showNotification('Setup Required', 'Please connect to Tana and select tags in settings.');
       chrome.runtime.openOptionsPage();
       return;
     }
@@ -131,23 +149,15 @@ async function clipPage(tab, selectionOnly) {
       return;
     }
 
-    // Determine target
-    let targetNodeId = settings.defaultTarget || 'INBOX';
-    if (targetNodeId === 'CUSTOM' && settings.customNodeId) {
-      targetNodeId = settings.customNodeId;
-    } else if (targetNodeId === 'TODAY') {
-      targetNodeId = 'INBOX'; // Fallback - Tana doesn't support date targeting via ID
-    }
-
-    // Send to Tana
-    const client = new TanaClient(settings.apiToken);
+    // Send to Tana via Local API
+    const client = new TanaLocalClient();
     const result = await client.clip({
       title: metadataResponse.metadata.title,
       content: contentResponse.content,
       metadata: metadataResponse.metadata,
-      supertagId: settings.supertags[0].id,
-      fieldMappings: settings.fieldMappings,
-      targetNodeId,
+      tagId: clipSettings.tagId,
+      tagName: clipSettings.tagName,
+      fieldMappings: clipSettings.fieldMappings,
       isSelection: selectionOnly && metadataResponse.hasSelection
     });
 
@@ -167,16 +177,9 @@ async function clipPage(tab, selectionOnly) {
  */
 async function clipImage(tab, imageUrl) {
   try {
-    const settings = await chrome.storage.sync.get([
-      'apiToken',
-      'supertags',
-      'fieldMappings',
-      'defaultTarget',
-      'customNodeId'
-    ]);
-
-    if (!settings.apiToken || !settings.supertags?.length) {
-      showNotification('Setup Required', 'Please configure your Tana settings first.');
+    const clipSettings = await getClipSettings();
+    if (!clipSettings) {
+      showNotification('Setup Required', 'Please connect to Tana and select tags in settings.');
       chrome.runtime.openOptionsPage();
       return;
     }
@@ -189,21 +192,14 @@ async function clipImage(tab, imageUrl) {
     // Create content with image link
     const content = `![Image](${imageUrl})\n\nSource: ${tab.url}`;
 
-    let targetNodeId = settings.defaultTarget || 'INBOX';
-    if (targetNodeId === 'CUSTOM' && settings.customNodeId) {
-      targetNodeId = settings.customNodeId;
-    } else if (targetNodeId === 'TODAY') {
-      targetNodeId = 'INBOX';
-    }
-
-    const client = new TanaClient(settings.apiToken);
+    const client = new TanaLocalClient();
     const result = await client.clip({
       title: `Image from: ${metadata.title}`,
       content,
       metadata: { ...metadata, url: tab.url },
-      supertagId: settings.supertags[0].id,
-      fieldMappings: settings.fieldMappings,
-      targetNodeId,
+      tagId: clipSettings.tagId,
+      tagName: clipSettings.tagName,
+      fieldMappings: clipSettings.fieldMappings,
       isSelection: true
     });
 
@@ -223,16 +219,9 @@ async function clipImage(tab, imageUrl) {
  */
 async function clipLink(tab, linkUrl, linkText) {
   try {
-    const settings = await chrome.storage.sync.get([
-      'apiToken',
-      'supertags',
-      'fieldMappings',
-      'defaultTarget',
-      'customNodeId'
-    ]);
-
-    if (!settings.apiToken || !settings.supertags?.length) {
-      showNotification('Setup Required', 'Please configure your Tana settings first.');
+    const clipSettings = await getClipSettings();
+    if (!clipSettings) {
+      showNotification('Setup Required', 'Please connect to Tana and select tags in settings.');
       chrome.runtime.openOptionsPage();
       return;
     }
@@ -245,14 +234,7 @@ async function clipLink(tab, linkUrl, linkText) {
     // Create content with link
     const content = `[${linkText || linkUrl}](${linkUrl})\n\nFound on: ${tab.url}`;
 
-    let targetNodeId = settings.defaultTarget || 'INBOX';
-    if (targetNodeId === 'CUSTOM' && settings.customNodeId) {
-      targetNodeId = settings.customNodeId;
-    } else if (targetNodeId === 'TODAY') {
-      targetNodeId = 'INBOX';
-    }
-
-    const client = new TanaClient(settings.apiToken);
+    const client = new TanaLocalClient();
     const result = await client.clip({
       title: linkText || linkUrl,
       content,
@@ -260,9 +242,9 @@ async function clipLink(tab, linkUrl, linkText) {
         ...pageMetadata,
         url: linkUrl
       },
-      supertagId: settings.supertags[0].id,
-      fieldMappings: settings.fieldMappings,
-      targetNodeId,
+      tagId: clipSettings.tagId,
+      tagName: clipSettings.tagName,
+      fieldMappings: clipSettings.fieldMappings,
       isSelection: true
     });
 
@@ -284,7 +266,7 @@ function showNotification(title, message) {
   // Use badge for quick feedback
   const isSuccess = title === 'Success';
 
-  chrome.action.setBadgeText({ text: isSuccess ? '✓' : '!' });
+  chrome.action.setBadgeText({ text: isSuccess ? '\u2713' : '!' });
   chrome.action.setBadgeBackgroundColor({
     color: isSuccess ? '#22c55e' : '#ef4444'
   });
@@ -313,16 +295,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
  */
 async function handlePopupClip(request) {
   try {
-    const settings = await chrome.storage.sync.get(['apiToken', 'fieldMappings']);
+    const settings = await chrome.storage.sync.get(['fieldMappings', 'supertags']);
+    const tag = settings.supertags?.[0] || {};
 
-    const client = new TanaClient(settings.apiToken);
+    const client = new TanaLocalClient();
     return await client.clip({
       title: request.title,
       content: request.content,
       metadata: request.metadata,
-      supertagId: request.supertagId,
+      tagId: request.tagId || tag.id,
+      tagName: request.tagName || tag.name,
       fieldMappings: settings.fieldMappings,
-      targetNodeId: request.targetNodeId,
       isSelection: request.isSelection
     });
   } catch (error) {

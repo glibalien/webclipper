@@ -1,6 +1,6 @@
 # Tana Web Clipper
 
-A Chrome/Edge browser extension for clipping web content directly to [Tana](https://tana.inc) with intelligent metadata extraction, supertag support, and smart content parsing.
+A Chrome/Edge browser extension for clipping web content directly to [Tana](https://tana.inc) via the Local API (MCP server). Features intelligent metadata extraction, auto-discovered supertags and field schemas, and smart content parsing.
 
 ## Features
 
@@ -27,10 +27,12 @@ The extension automatically extracts rich metadata from web pages:
 - **Selection Preservation**: Respects user selections for precise clipping
 
 ### Tana Integration
+- **Local API**: Connects to Tana Desktop's MCP server — no cloud API token needed
+- **Auto-Discovery**: Automatically loads workspaces, tags, and field schemas from your Tana graph
 - **Supertag Support**: Tag clipped content with your Tana supertags
-- **Field Mapping**: Map metadata to specific fields in your Tana schema
-- **Author/Publication Deduplication**: Smart caching prevents duplicate author and publication nodes
-- **Reference Creation**: Automatically creates or references existing author/publication nodes
+- **Field Mapping**: Map metadata to fields auto-populated from tag schemas
+- **Author/Publication Deduplication**: Tana Paste `[[references]]` prevent duplicate nodes automatically
+- **Reference Creation**: Optionally creates tagged references for authors and publications
 
 ## Installation
 
@@ -64,39 +66,28 @@ Install the extension directly from the Chrome Web Store:
 
 ## Setup
 
-### Getting Your Tana API Token
+### Prerequisites
 
-1. Open your Tana workspace
-2. Go to Settings (click your workspace name → Settings)
-3. Navigate to the API section
-4. Generate or copy your API token
+1. **Tana Desktop** must be running
+2. Enable **"Local API/MCP server (Alpha)"** in Tana Labs (Settings → Tana Labs)
 
-### Configuring the Extension
+### Connecting the Extension
 
-1. Click the Tana Web Clipper icon in your toolbar
-2. Click "Open Settings" or right-click the icon → "Options"
-3. Enter your Tana API token
-4. Configure at least one supertag:
-   - **Display Name**: How you'll see it in the popup (e.g., "Article")
-   - **Supertag ID**: The ID from Tana (found in supertag settings)
+1. Click the Tana Web Clipper icon → "Open Settings" (or right-click the icon → "Options")
+2. Click **"Connect to Tana"** — Tana Desktop will show an approval prompt
+3. Once connected, a green dot indicates the connection is active
+4. Select your **workspace** from the dropdown
+5. Check the **tags** you want available when clipping (e.g., "Article", "Bookmark")
+6. **Field mappings** are auto-populated from tag schemas — adjust if needed
 
-### Optional Field Mappings
+### Field Mappings
 
-Map metadata to specific fields in your Tana schema:
+The extension auto-detects fields by name from your tag schemas:
 
-- **Author Field**:
-  - As text: Simple text field
-  - As supertag: Creates author nodes with their own supertag (enables deduplication)
-- **URL Field**: Stores the source URL
-- **Publication Field**:
-  - As text: Simple text field
-  - As supertag: Creates publication nodes with their own supertag (enables deduplication)
-- **Date Field**: Stores publication date
-
-To find field IDs in Tana:
-1. Open your supertag configuration
-2. Find the field you want to map
-3. Copy the field ID from the field settings
+- **Author**: Can be plain text or a tagged reference (e.g., `#person`) for automatic deduplication
+- **URL**: Stored as a markdown link
+- **Publication**: Can be plain text or a tagged reference (e.g., `#publication`)
+- **Date**: Stored as a Tana date reference
 
 ## Usage
 
@@ -131,14 +122,14 @@ webclipper/
 ├── scripts/
 │   ├── background.js       # Background service worker
 │   ├── content.js          # Content extraction and metadata parsing
-│   └── tana-api.js         # Tana API client and node builder
+│   └── tana-local-api.js   # MCP client, Tana Paste builder, API client
 ├── popup/
 │   ├── popup.html          # Popup UI
 │   ├── popup.js            # Popup controller
 │   └── popup.css           # Popup styling
 └── options/
     ├── options.html        # Settings page
-    ├── options.js          # Settings controller
+    ├── options.js          # Settings controller (ES6 module)
     └── options.css         # Settings styling
 ```
 
@@ -148,7 +139,8 @@ webclipper/
 - Orchestrates clipping operations
 - Handles context menu creation
 - Manages keyboard shortcuts
-- Coordinates between content scripts and Tana API
+- Coordinates between content scripts and Tana Local API
+- Runs v1→v2 migration on update
 
 #### Content Script (`scripts/content.js`)
 - Injected into web pages for DOM access
@@ -157,12 +149,11 @@ webclipper/
 - Removes ads, navigation, and clutter
 - Handles text selections
 
-#### Tana API Client (`scripts/tana-api.js`)
-- Builds Tana node structures
-- Manages node caching for deduplication
-- Handles author/publication parsing and referencing
-- Chunks long content intelligently
-- Communicates with Tana's cloud API
+#### Tana Local API Client (`scripts/tana-local-api.js`)
+Three classes:
+- **`McpClient`**: JSON-RPC 2.0 transport for `localhost:8262/mcp`. Handles session initialization, auth via Tana Desktop approval, session persistence, and auto-reconnection.
+- **`TanaPasteBuilder`**: Generates `%%tana%%` formatted strings. Handles field formatting (author/publication references, dates, URLs), content chunking, and multi-author parsing.
+- **`TanaLocalClient`**: High-level API — `clip()`, `testConnection()`, `listWorkspaces()`, `listTags()`, `getTagSchema()`.
 
 ### Data Flow
 
@@ -173,27 +164,20 @@ Background Worker
     ↓
 Content Script (extracts metadata + content)
     ↓
-Tana API Client (builds node structure)
+TanaPasteBuilder (generates %%tana%% format)
     ↓
-Node Cache (deduplication check)
-    ↓
-Tana API (sends data)
-    ↓
-Response Processing (updates cache)
+McpClient (sends via MCP to Tana Desktop)
     ↓
 User Notification (success/error)
 ```
 
-### Node Caching & Deduplication
+### Deduplication via Tana Paste
 
-The extension implements intelligent caching to prevent duplicate author and publication nodes:
+The extension uses Tana Paste's `[[Name #[[tag]]]]` reference syntax for automatic deduplication:
 
-- **Cache Key Format**: `"supertagId:normalizedName"`
-- **Storage**: `chrome.storage.local` for fast access
-- **Behavior**:
-  - First clip with "John Doe" → Creates new author node, caches ID
-  - Subsequent clips with "John Doe" → References existing node
-- **Benefits**: Clean Tana graph, no duplicate entities
+- When you clip an article by "John Doe", the Tana Paste output includes `[[John Doe #[[person]]]]`
+- Tana automatically finds an existing "John Doe" node with the `#person` tag, or creates a new one
+- No client-side cache needed — deduplication is handled natively by Tana
 
 ### Content Chunking
 
@@ -202,7 +186,7 @@ Long content is automatically chunked at smart boundaries:
 2. Line breaks
 3. Sentence breaks
 4. Word breaks
-5. Hard cut at 4500 characters (Tana API limit)
+5. Hard cut at 4500 characters (Tana limit)
 
 ### Metadata Extraction Strategy
 
@@ -224,6 +208,7 @@ The extension uses a comprehensive fallback strategy for each metadata field:
 
 ### Prerequisites
 - Chrome or Edge browser
+- Tana Desktop with Local API enabled
 - Basic understanding of browser extensions and JavaScript
 
 ### Local Development
@@ -242,64 +227,49 @@ The extension uses a comprehensive fallback strategy for each metadata field:
 | Feature | Files to Edit |
 |---------|---------------|
 | Metadata extraction | `scripts/content.js` |
-| Tana API integration | `scripts/tana-api.js` |
+| Tana API integration | `scripts/tana-local-api.js` |
 | UI/UX | `popup/popup.html`, `popup/popup.js`, `popup/popup.css` |
 | Settings | `options/options.html`, `options/options.js` |
 | Background logic | `scripts/background.js` |
 | Extension config | `manifest.json` |
 
 ### Testing Checklist
+- [ ] Connection: Options page shows green "Connected" status
+- [ ] Auto-discovery: Workspace dropdown populates; tag list populates and is filterable
 - [ ] Full page clipping on various sites (news, blogs, documentation)
 - [ ] Selection clipping with different content types
 - [ ] Image and link clipping
 - [ ] Settings persistence across browser restarts
 - [ ] Keyboard shortcut functionality
-- [ ] Error handling (invalid API token, network errors)
+- [ ] Error handling (Tana not running, no tags configured)
 - [ ] Metadata extraction on edge cases (missing authors, dates, etc.)
 - [ ] Deduplication for repeat authors/publications
 
 ## API Reference
 
-### Tana API Endpoint
-```
-POST https://europe-west1-tagr-prod.cloudfunctions.net/addToNodeV2
-```
+### Tana Local API (MCP)
 
-**Headers**:
-```
-Content-Type: application/json
-Authorization: Bearer {your-api-token}
-```
+The extension communicates with Tana Desktop's MCP server via JSON-RPC 2.0:
 
-**Payload Example**:
-```json
-{
-  "targetNodeId": "INBOX",
-  "nodes": [{
-    "name": "Article Title",
-    "supertags": [{ "id": "supertagId" }],
-    "children": [
-      {
-        "type": "field",
-        "attributeId": "authorFieldId",
-        "children": [{
-          "dataType": "reference",
-          "nodeId": "cached-author-node-id"
-        }]
-      },
-      {
-        "type": "field",
-        "attributeId": "urlFieldId",
-        "children": [{
-          "name": "https://example.com/article",
-          "dataType": "url"
-        }]
-      },
-      { "name": "First paragraph content..." },
-      { "name": "Second paragraph content..." }
-    ]
-  }]
-}
+**Endpoint**: `http://localhost:8262/mcp`
+**Health Check**: `http://localhost:8262/health`
+
+**MCP Tools Used**:
+- `import_tana_paste` — Import content in Tana Paste format
+- `list_workspaces` — Get available workspaces
+- `list_tags` — Get tags in a workspace
+- `get_tag_schema` — Get field schema for a tag
+
+**Tana Paste Example**:
+```
+%%tana%%
+- Article Title #[[Article^tagId]]
+  - Author:: [[John Smith #[[person]]]]
+  - URL:: [Article Title](https://example.com/article)
+  - Published Date:: [[date:2024-01-15]]
+  - Publication:: [[NYT #[[publication]]]]
+  - First paragraph of content
+  - Second paragraph of content
 ```
 
 ## Permissions
@@ -307,17 +277,17 @@ Authorization: Bearer {your-api-token}
 The extension requests these permissions:
 
 - **activeTab**: Access current tab content for clipping
-- **storage**: Save settings and node cache
+- **storage**: Save settings and MCP session
 - **contextMenus**: Add right-click menu options
 - **scripting**: Inject content scripts for metadata extraction
-- **host_permissions**: Communicate with Tana's API endpoint
+- **host_permissions**: Communicate with Tana's Local API on `localhost:8262`
 
 ## Troubleshooting
 
-### "Invalid API Token" Error
-- Verify your token in Tana Settings → API
-- Copy the token exactly (no extra spaces)
-- Re-paste in extension settings
+### "Not Connected" Status
+- Make sure Tana Desktop is running
+- Enable "Local API/MCP server (Alpha)" in Tana Labs (Settings → Tana Labs)
+- Click "Connect to Tana" and approve the connection in the Tana Desktop prompt
 
 ### Content Not Clipping Correctly
 - Try using selection mode (select text before clipping)
@@ -333,6 +303,10 @@ The extension requests these permissions:
 - Make sure Developer Mode is enabled
 - Try reloading the extension
 - Check for errors in `chrome://extensions`
+
+### Upgrading from v1 (Cloud API)
+- The extension automatically removes old settings (`apiToken`, `tanaNodeCache`) on update
+- You'll need to connect to Tana via the Local API and re-select your tags in settings
 
 ## Contributing
 

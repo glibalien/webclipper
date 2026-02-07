@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tana Web Clipper",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "description": "Clip web content to Tana with supertags and metadata",
   "permissions": [
     "activeTab",
@@ -10,7 +10,7 @@
     "scripting"
   ],
   "host_permissions": [
-    "https://europe-west1-tagr-prod.cloudfunctions.net/*"
+    "http://localhost:8262/*"
   ],
   "action": {
     "default_popup": "popup/popup.html",

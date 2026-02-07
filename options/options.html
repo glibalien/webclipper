@@ -10,24 +10,24 @@
   <div class="container">
     <header>
       <h1>Tana Web Clipper Settings</h1>
-      <p class="subtitle">Configure your Tana integration</p>
+      <p class="subtitle">Configure your Tana Local API integration</p>
     </header>
 
     <main>
-      <!-- API Token Section -->
+      <!-- Connection Section -->
       <section class="section">
-        <h2>Tana API Token</h2>
+        <h2>Connection</h2>
         <p class="help-text">
-          Generate an API token from your Tana workspace: Settings &gt; API Tokens
+          Requires Tana Desktop with "Local API/MCP server (Alpha)" enabled in Tana Labs.
         </p>
-        <div class="form-group">
-          <label for="api-token">API Token</label>
-          <div class="input-with-button">
-            <input type="password" id="api-token" placeholder="Enter your Tana API token">
-            <button type="button" id="toggle-token" class="btn btn-secondary btn-small">Show</button>
-          </div>
+        <div class="connection-status-row">
+          <span id="connection-dot" class="connection-dot disconnected"></span>
+          <span id="connection-text" class="connection-text">Not connected</span>
         </div>
-        <div class="form-group">
+        <div class="form-group button-row">
+          <button type="button" id="connect-btn" class="btn btn-primary">
+            Connect to Tana
+          </button>
           <button type="button" id="test-connection" class="btn btn-secondary">
             Test Connection
           </button>
@@ -35,111 +35,46 @@
         </div>
       </section>
 
-      <!-- Supertag Configuration -->
-      <section class="section">
-        <h2>Supertag Configuration</h2>
-        <div class="help-box">
-          <h4>How to get your Supertag ID:</h4>
-          <ol>
-            <li>Open Tana and navigate to your supertag definition</li>
-            <li>Click on the supertag name to open its configuration</li>
-            <li>Run the command: <code>Show API Schema</code></li>
-            <li>Copy the <code>id</code> value from the JSON</li>
-          </ol>
+      <!-- Workspace Section -->
+      <section class="section" id="workspace-section" style="display: none;">
+        <h2>Workspace</h2>
+        <div class="form-group">
+          <label for="workspace-select">Select workspace</label>
+          <div class="input-with-button">
+            <select id="workspace-select">
+              <option value="">Loading...</option>
+            </select>
+            <button type="button" id="refresh-workspaces" class="btn btn-secondary btn-small" title="Refresh workspaces">Refresh</button>
+          </div>
         </div>
-
-        <div id="supertags-list" class="supertags-list">
-          <!-- Supertags will be dynamically added here -->
-        </div>
-
-        <button type="button" id="add-supertag" class="btn btn-secondary">
-          + Add Supertag
-        </button>
       </section>
 
-      <!-- Field Mappings -->
-      <section class="section">
+      <!-- Tags Section -->
+      <section class="section" id="tags-section" style="display: none;">
+        <h2>Tags for Clipping</h2>
+        <p class="help-text">
+          Select which tags are available in the popup dropdown when clipping.
+        </p>
+        <div class="form-group">
+          <div class="input-with-button">
+            <input type="text" id="tag-filter" placeholder="Filter tags...">
+            <button type="button" id="refresh-tags" class="btn btn-secondary btn-small" title="Refresh tags">Refresh</button>
+          </div>
+        </div>
+        <div id="tags-list" class="tags-list">
+          <div class="tags-loading">Loading tags...</div>
+        </div>
+      </section>
+
+      <!-- Field Mappings Section -->
+      <section class="section" id="field-mappings-section" style="display: none;">
         <h2>Field Mappings</h2>
         <p class="help-text">
-          Map metadata to Tana fields. Get field IDs from the same "Show API Schema" output.
-          Leave blank to skip that field.
+          Map extracted metadata to fields on your selected tags. Fields are auto-detected from tag schemas.
         </p>
 
-        <h3>Author</h3>
-
-        <div class="form-group">
-          <label for="field-author">Author Field ID</label>
-          <input type="text" id="field-author" placeholder="e.g., iKQAQN38Vx">
-        </div>
-
-        <div class="form-group">
-          <label>Author Field Type</label>
-          <div class="radio-group">
-            <label class="radio-label">
-              <input type="radio" name="author-field-type" id="author-type-text" value="text" checked>
-              <span>Text</span>
-              <span class="radio-help">Store author as plain text</span>
-            </label>
-            <label class="radio-label">
-              <input type="radio" name="author-field-type" id="author-type-supertag" value="supertag">
-              <span>Options from Supertag</span>
-              <span class="radio-help">Create instances of an author supertag</span>
-            </label>
-          </div>
-        </div>
-
-        <div class="form-group" id="author-supertag-group" style="display: none;">
-          <label for="field-author-supertag">Author Supertag ID</label>
-          <input type="text" id="field-author-supertag" placeholder="e.g., MaaJRCypzJ">
-          <p class="help-text">
-            The ID of the supertag to apply to each author (e.g., #author, #person).
-            Multiple authors will be parsed and created as separate instances.
-          </p>
-        </div>
-
-        <h3>Publication</h3>
-
-        <div class="form-group">
-          <label for="field-publication">Publication Field ID</label>
-          <input type="text" id="field-publication" placeholder="e.g., kM3NSE58Xz">
-        </div>
-
-        <div class="form-group">
-          <label>Publication Field Type</label>
-          <div class="radio-group">
-            <label class="radio-label">
-              <input type="radio" name="publication-field-type" id="publication-type-text" value="text" checked>
-              <span>Text</span>
-              <span class="radio-help">Store publication as plain text</span>
-            </label>
-            <label class="radio-label">
-              <input type="radio" name="publication-field-type" id="publication-type-supertag" value="supertag">
-              <span>Options from Supertag</span>
-              <span class="radio-help">Create instances of a publication supertag</span>
-            </label>
-          </div>
-        </div>
-
-        <div class="form-group" id="publication-supertag-group" style="display: none;">
-          <label for="field-publication-supertag">Publication Supertag ID</label>
-          <input type="text" id="field-publication-supertag" placeholder="e.g., NbbKSCzqaL">
-          <p class="help-text">
-            The ID of the supertag to apply to the publication (e.g., #publication, #source).
-          </p>
-        </div>
-
-        <h3>URL</h3>
-
-        <div class="form-group">
-          <label for="field-url">URL Field ID</label>
-          <input type="text" id="field-url" placeholder="e.g., jL2MRD47Wy">
-        </div>
-
-        <h3>Date</h3>
-
-        <div class="form-group">
-          <label for="field-date">Date Field ID</label>
-          <input type="text" id="field-date" placeholder="e.g., lN4OTF69Ya">
+        <div id="field-mappings-container">
+          <!-- Populated dynamically per selected tag -->
         </div>
       </section>
 
@@ -164,24 +99,6 @@
     </main>
   </div>
 
-  <!-- Supertag Template (hidden) -->
-  <template id="supertag-template">
-    <div class="supertag-item" data-index="">
-      <div class="supertag-header">
-        <span class="supertag-number"></span>
-        <button type="button" class="btn-remove" title="Remove supertag">&times;</button>
-      </div>
-      <div class="form-group">
-        <label>Display Name</label>
-        <input type="text" class="supertag-name" placeholder="e.g., Article, Bookmark">
-      </div>
-      <div class="form-group">
-        <label>Supertag ID</label>
-        <input type="text" class="supertag-id" placeholder="e.g., MaaJRCypzJ">
-      </div>
-    </div>
-  </template>
-
-  <script src="options.js"></script>
+  <script src="options.js" type="module"></script>
 </body>
 </html>
