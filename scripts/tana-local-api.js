@@ -156,7 +156,7 @@ class McpClient {
 
     const headers = {
       'Content-Type': 'application/json',
-      'Accept': 'application/json'
+      'Accept': 'application/json, text/event-stream'
     };
     if (this.accessToken) {
       headers['Authorization'] = `Bearer ${this.accessToken}`;
